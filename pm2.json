@@ -1,0 +1,15 @@
+{
+    "apps": [
+        {
+            "name": "server",
+            "script": "./server.js",
+            "cwd":"./",
+            "instances": 1,
+            "exec_mode": "cluster",
+            "node_args": "-r ./dist/index.js",
+            "env": {
+                "APM_ENDPOINT_SERVICE": "test-node"
+            }
+        }
+    ]
+}

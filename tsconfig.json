@@ -1,0 +1,26 @@
+{
+    "compilerOptions": {
+        "module": "commonjs",
+        "target": "esnext",
+        "noImplicitAny": false, 
+        "suppressImplicitAnyIndexErrors": true,
+        "moduleResolution": "node",
+        "sourceMap": true,
+        "experimentalDecorators": true,
+        "emitDecoratorMetadata": true,
+        "noUnusedLocals": false,                /* Report errors on unused locals. */
+        "noUnusedParameters": false,             /* Report errors on unused parameters. */
+        "outDir": "dist",
+        "baseUrl": "src",
+        "skipLibCheck": true,
+        "esModuleInterop": true,
+        "resolveJsonModule": true,
+        "lib": [
+            "es2019"
+        ],
+        "allowJs": true
+    },
+    "include": [
+        "src/**/*"
+    ]
+}
