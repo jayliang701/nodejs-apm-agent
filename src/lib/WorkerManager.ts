@@ -1,18 +1,15 @@
-import cluster from "cluster";
+import { watchFile } from "fs";
+import { readFile } from "fs/promises";
 import path from "path";
 import { EventEmitter } from "stream";
+import { PERSIST_FILE_PATH } from "./consts";
+import { PersistData, WorkingMode } from "./types";
 
-const isPM2 = !!process.env.PM2_HOME;
 let pm2;
 
-const getWorkerIdsFromPrimaryProcess = (): number[] => {
-    const pids: number[] = [];
-    for (let key in cluster.workers) {
-        const worker = cluster.workers[key];
-        const pid = worker.process.pid;
-        pids.push(pid);
-    }
-    return pids;
+const getPersistData = async (): Promise<PersistData> => {
+    const data: PersistData = JSON.parse(await readFile(PERSIST_FILE_PATH, 'utf-8'));
+    return data;
 }
 
 const getWorkerIdsFromPM2 = (): Promise<number[]> => {
@@ -33,51 +30,83 @@ const getWorkerIdsFromPM2 = (): Promise<number[]> => {
     });
 }
 
+const workingMode = process.env.APM_AGENT_WORKING_MODE as WorkingMode;
+const isPM2 = workingMode === WorkingMode.PM2;
+
+const startupPM2 = (): Promise<void> => {
+    return new Promise((resolve, reject) => {
+        if (isPM2) {
+            try {
+                try {
+                    pm2 = require('pm2');
+                } catch {
+                    if (process.env.NODE_PATH) {
+                        pm2 = require(path.resolve(process.env.NODE_PATH, 'pm2'));
+                    } else {
+                        pm2 = undefined;
+                    }
+                }
+            } catch {
+                pm2 = undefined;
+            }
+            if (pm2) {
+                pm2.connect((err) => {
+                    if (err) {
+                        pm2 = undefined;
+                        reject(new Error(`connect pm2 failed. ${err.message || err}`));
+                        return;
+                    }
+                    resolve();
+                });
+            } else {
+                const err = new Error('missing pm2 module. You may need to execute "npm isntall pm2" or config "NODE_PATH" and update pm2 to use global pm2 module.');
+                reject(err);
+            }
+        } else {
+            resolve();
+        }
+    });
+}
+
 export default class WorkerManager extends EventEmitter {
 
+    pids: number[] = [];
+
     async start(): Promise<void> {
-        return new Promise((resolve, reject) => {
-            if (isPM2) {
-                try {
-                    try {
-                        pm2 = require('pm2');
-                    } catch {
-                        if (process.env.NODE_PATH) {
-                            pm2 = require(path.resolve(process.env.NODE_PATH, 'pm2'));
-                        } else {
-                            pm2 = undefined;
-                        }
-                    }
-                } catch {
-                    pm2 = undefined;
-                }
-                if (pm2) {
-                    pm2.connect((err) => {
-                        if (err) {
-                            pm2 = undefined;
-                            reject(new Error(`connect pm2 failed. ${err.message || err}`));
-                            return;
-                        }
-                        resolve();
-                    });
-                } else {
-                    const err = new Error('missing pm2 module. You may need to execute "npm isntall pm2" or config "NODE_PATH" and update pm2 to use global pm2 module.');
-                    reject(err);
-                }
-            } else {
-                resolve();
-            }
-        });
+        await startupPM2();
+        if (!pm2) {
+            await this.onPersistDataChanged();
+            watchFile(PERSIST_FILE_PATH, {}, this.onPersistDataChanged);
+        }
     }
 
-    async getWorkerIds(): Promise<number[]> {
-        let pids: number[] = [];
-        if (pm2) {
-            pids = await getWorkerIdsFromPM2();
-        } else if (cluster.workers) {
-            pids = getWorkerIdsFromPrimaryProcess();
+    async refreshWorkerIds(): Promise<number[]> {
+        try {
+            if (pm2) {
+                this.pids = await getWorkerIdsFromPM2();
+            }
+        } catch (err) {
+            console.warn(err);
         }
-        return pids;
+        return this.pids;
+    }
+
+    onPersistDataChanged = async () => {
+        let primaryPID: number = Number(process.env.APM_AGENT_PARENT_PROCESS_PID);
+        let pids: number[] = [];
+        try {
+            const data: PersistData = await getPersistData();
+            if (data.primaryPID === primaryPID) {
+                pids = data.workerPIDs;
+            }
+            pids.push(primaryPID);
+        } catch (err) {
+            console.warn(err);
+            pids = [
+                primaryPID,
+            ];
+        }
+        this.pids = pids;
     }
 
 }

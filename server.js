@@ -1,7 +1,7 @@
 const express = require('express');
 
 const cluster = require("cluster");
-const totalCPUs = 4; //require("os").cpus().length;
+const totalCPUs = 2; //require("os").cpus().length;
 
 // if (cluster.isPrimary) {
 //     console.log(`Number of CPUs is ${totalCPUs}`);
@@ -13,7 +13,7 @@ const totalCPUs = 4; //require("os").cpus().length;
 //     //     cluster.fork();
 //     // });
 
-//     for (let i = 0; i < 2; i ++) {
+//     for (let i = 0; i < totalCPUs; i ++) {
 //         cluster.fork();
 //     }
 
@@ -53,4 +53,8 @@ const totalCPUs = 4; //require("os").cpus().length;
     app.listen(port, () => {
         console.log(`Example app listening on port ${port}`)
     });
+
+    // setInterval(() => {
+    //     console.log('working...');
+    // }, 6000);
 // }
