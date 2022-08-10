@@ -1,23 +1,9 @@
 
 import { networkInterfaces } from 'os';
 import crypto from 'crypto';
-import cluster, { Worker } from 'cluster';
 import WorkerManager from './WorkerManager';
+import { AgentConfig, Metric } from './types';
 const pidusage = require('pidusage');
-
-type Metric = {
-    pid: number;
-    cpu: number;
-    aliveTime: number;
-    memory: NodeJS.MemoryUsage;
-};
-
-export type AgentConfig = {
-    serverAddress: string;    //IP:PORT   默认 127.0.0.1:12700
-    service: string;
-    serviceInstance: string;   //不指定则随机生成
-    collectDuration: number;   //秒, 收集间隔, 默认5秒
-};
 
 const getAgentIP = (): string => {
     const ip = Object.values(networkInterfaces()).flat().find((i) => i?.family === 'IPv4' && !i?.internal)?.address;
@@ -46,25 +32,29 @@ const setDefaultConfig = (config: Partial<AgentConfig> | undefined, ip: string):
 }
 
 const queryMetric = async (pid: number): Promise<Metric> => {
-    const mem = process.memoryUsage();
-    const stats = await pidusage(pid);
-    return {
-        pid,
-        cpu: stats.cpu,
-        memory: mem,
-        aliveTime: stats.elapsed,
+    try {
+        const stats = await pidusage(pid);
+        return {
+            pid,
+            cpu: stats.cpu,
+            memory: stats.memory,
+            aliveTime: stats.elapsed,
+        }
+    } catch {
+        return {
+            pid,
+            cpu: 0,
+            memory: 0,
+            aliveTime: Date.now(),
+        }
     }
 }
-
-const EXIT_EVENTS: string[] = [`exit`, `SIGINT`, `SIGUSR1`, `SIGUSR2`, `uncaughtException`, `SIGTERM`];
 
 export default class Agent {
 
     private timer: NodeJS.Timer;
 
     private config: AgentConfig;
-
-    private workers: Record<number, Worker> = {};
 
     private workerManager: WorkerManager = new WorkerManager();
     
@@ -73,70 +63,28 @@ export default class Agent {
         this.config = setDefaultConfig(config, ip);
         // this.startMonitor();
         await this.workerManager.start();
+        this.startMonitor();
     }
 
     private startMonitor() {
         this.stopMonitor();
         this.timer = setInterval(async () => {
-            const newWorkers: Record<number, Worker> = {};
             const tasks: Promise<Metric>[] = [];
-            if (cluster.workers) {
-                for (let key in cluster.workers) {
-                    const worker = cluster.workers[key];
-                    const pid = worker.process.pid;
 
-                    newWorkers[pid] = worker;
-                    tasks.push(queryMetric(pid));
-                    // console.log(`${pid} CPU ---> ${stats.cpu}`);
-                }
+            const pids: number[] = await this.workerManager.refreshWorkerIds();
+            console.log(pids);
+            for (let pid of pids) {
+                tasks.push(queryMetric(pid));
             }
+
             if (tasks.length > 0) {
                 const res = await Promise.all(tasks);
                 for (let metric of res) {
-                    console.log(`${metric.pid} CPU: ${metric.cpu}      mem_heapUsed: ${metric.memory.heapUsed}      mem_heapTotal: ${metric.memory.heapTotal}`);
+                    console.log(`${metric.pid} CPU: ${metric.cpu}      mem: ${metric.memory}`);
                 }
                 console.log(`----------------------------`);
             }
-            const pids = Object.keys(this.workers);
-            for (let pid of pids) {
-                if (!newWorkers[pid]) {
-                    //unregister
-                    this.unRegisterWorker(this.workers[pid]);
-                } else {
-                    delete newWorkers[pid];
-                }
-            }
-            for (let pid in newWorkers) {
-                this.registerWorker(newWorkers[pid]);
-            }
         }, this.config.collectDuration * 1000);
-    }
-
-    private registerWorker(worker: Worker) {
-        if (worker.isDead()) {
-            return;
-        }
-        const pid = worker.process.pid;
-        console.log('register worker ---> ', pid);
-        this.workers[pid] = worker;
-
-        EXIT_EVENTS.forEach((eventType) => {
-            worker.process.once(eventType, () => {
-                console.error('worker shutdown ---> event:', eventType, '     pid:' , pid);
-                this.unRegisterWorker(worker);
-            });
-        });
-
-    }
-
-    private unRegisterWorker(worker: Worker) {
-        const pid = worker.process.pid;
-        delete this.workers[pid];
-
-        EXIT_EVENTS.forEach((eventType) => {
-            worker.process.removeAllListeners(eventType);
-        });
-
     }
 
     private stopMonitor() {
@@ -148,9 +96,6 @@ export default class Agent {
 
     dispose() {
         this.stopMonitor();
-        for (let pid in this.workers) {
-            this.unRegisterWorker(this.workers[pid]);
-        }
     }
 
 }

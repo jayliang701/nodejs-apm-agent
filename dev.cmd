@@ -1,1 +1,1 @@
-cross-env APM_ENDPOINT_SERVICE="test-app" node -r './dist/index.js' server
+npm run build & cross-env APM_ENDPOINT_SERVICE="test-app" node -r './dist/index.js' server
