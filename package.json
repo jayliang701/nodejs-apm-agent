@@ -5,10 +5,11 @@
     "main": "index.js",
     "scripts": {
         "clean": "rimraf -rf dist/*",
+        "assets": "ncp src/lib/proto dist/lib/proto",
         "build-ts": "tsc",
         "tslint": "tslint --fix -c tslint.json -p tsconfig.json",
         "serve": "node dist/index.js",
-        "build": "npm run build-ts",
+        "build": "npm run build-ts && npm run assets",
         "start": "npm run build && npm run serve",
         "start:dev": "npm run clean && nodemon",
         "prettier": "prettier --check '**/*.ts'",
