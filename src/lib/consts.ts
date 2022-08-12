@@ -4,7 +4,7 @@ import { AgentConfig } from "./types";
 
 export const PROCESS_EXIT_EVENTS: string[] = [`exit`, `SIGINT`, `SIGUSR1`, `SIGUSR2`, `uncaughtException`, `SIGTERM`];
 
-export const PERSIST_FILE_PATH: string = path.resolve(homedir(), '.apm-agent.json');
+export const PERSIST_FILE_FOLDER_PATH: string = path.resolve(homedir(), '.apm-agent');
 
 export const DEFAULT_AGENT_CONFIG: AgentConfig = {
     service: process.env.APM_ENDPOINT_SERVICE,

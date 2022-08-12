@@ -2,13 +2,12 @@ import { watchFile } from "fs";
 import { readFile } from "fs/promises";
 import path from "path";
 import { EventEmitter } from "stream";
-import { PERSIST_FILE_PATH } from "./consts";
 import { PersistData, WorkingMode } from "./types";
 
 let pm2;
 
 const getPersistData = async (): Promise<PersistData> => {
-    const data: PersistData = JSON.parse(await readFile(PERSIST_FILE_PATH, 'utf-8'));
+    const data: PersistData = JSON.parse(await readFile(process.env.APM_AGENT_PERSIST_FILE, 'utf-8'));
     return data;
 }
 
@@ -76,7 +75,7 @@ export default class WorkerManager extends EventEmitter {
         await startupPM2();
         if (!pm2) {
             await this.onPersistDataChanged();
-            watchFile(PERSIST_FILE_PATH, {}, this.onPersistDataChanged);
+            watchFile(process.env.APM_AGENT_PERSIST_FILE, {}, this.onPersistDataChanged);
         }
     }
 
@@ -101,7 +100,9 @@ export default class WorkerManager extends EventEmitter {
             }
             pids.push(primaryPID);
         } catch (err) {
-            console.warn(err);
+            if (err.code !== 'ENOENT') {
+                console.warn(`getPersistData() failed ---> `, err);
+            }
             pids = [
                 primaryPID,
             ];
