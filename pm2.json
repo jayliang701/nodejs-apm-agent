@@ -8,7 +8,7 @@
             "exec_mode": "cluster",
             "node_args": "-r ./dist/index.js",
             "env": {
-                "APM_ENDPOINT_SERVICE": "test-node"
+                "APM_AGENT_CONFIG": "./agent.config.js"
             },
             "env_production": {
                "NODE_ENV": "production"

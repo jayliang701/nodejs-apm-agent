@@ -6,6 +6,9 @@ module.exports = {
         metric: {
             enabled: true,
             duration: 5,
+        },
+        logging: {
+            enabled: false,
         }
     }
 }

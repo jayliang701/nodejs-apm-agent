@@ -7,6 +7,7 @@ import RPCClient from './RPCClient';
 import MetricCollector from './MetricCollector';
 import { DEFAULT_AGENT_CONFIG } from './consts';
 import { defaultSet } from './utils';
+// import LoggingCollector from './LoggingCollector';
 
 const getAgentIP = (): string => {
     const ip = Object.values(networkInterfaces()).flat().find((i) => i?.family === 'IPv4' && !i?.internal)?.address;
@@ -50,6 +51,7 @@ export default class Agent {
         return this.workerManager;
     }
 
+    // private loggingCollector: LoggingCollector;
     private metricCollector: MetricCollector;
     
     async start(config: Partial<Omit<AgentConfig, 'service'>> & Pick<AgentConfig, 'service'>): Promise<void> {
@@ -66,6 +68,11 @@ export default class Agent {
             this.metricCollector = new MetricCollector(this);
             this.metricCollector.start();
         }
+
+        // if (this.config.collect.logging.enabled) {
+        //     this.metricCollector = new MetricCollector(this);
+        //     this.metricCollector.start();
+        // }
 
         console.log(`APM Nodejs agent <${this.config.service}::${this.config.serviceInstance}> is running.`);
     }

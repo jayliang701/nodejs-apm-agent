@@ -4,7 +4,7 @@ import { AgentConfig, Metric, MetricProcessRPCMessage } from "./types";
 import TypedEventEmitter from "./utils/TypedEventEmitter";
 const pidusage = require('pidusage');
 
-const queryMetric = async (pid: number, time): Promise<Metric> => {
+const queryMetric = async (pid: number, time: number): Promise<Metric> => {
     try {
         const stats = await pidusage(pid);
         return {
@@ -84,7 +84,7 @@ export default class MetricCollector extends TypedEventEmitter {
                 }
 
                 RPCClient.getSharedClient().reportMetric(this.config.service, this.config.serviceInstance, this.messages).then(() => {
-                    console.error(`report metrics to APM server successfully`);
+                    console.log(`report metrics to APM server successfully`);
 
                     this.messages.length = 0;
                     this.pendingDict.clear();

@@ -50,8 +50,29 @@ export type AgentConfig = {
             maxLen: number;   //缓存的最长数组长度
             duration: number;
         },
-        log: {
+        logging: {
             enabled: boolean;
         }
     }
 };
+
+export type SkywalkingLoggingCollectData = {
+    service: string;
+    serviceInstance: string;
+    timestamp: string;
+    endpoint: string;
+    body: {
+        type: 'TEXT' | 'JSON' | 'YAML';
+        text?: {
+            text: string;
+        },
+        json?: any;
+        yaml?: any;
+        content: 'text' | 'json' | 'yaml';
+    },
+    tags: {
+        data: { key: string, value: string }[];
+    }
+};
+
+export type LogLevel = 'ERROR' | 'INFO' | 'WARN' | 'DEBUG';

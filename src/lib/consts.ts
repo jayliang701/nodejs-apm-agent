@@ -11,7 +11,7 @@ export const DEFAULT_AGENT_CONFIG: AgentConfig = {
     serviceInstance: process.env.APM_ENDPOINT_SERVICE_INSTANCE,
     serverAddress: process.env.APM_SERVER_ADDRESS || '127.0.0.1:12700',
     collect: {
-        log: {
+        logging: {
             enabled: false,
         },
         metric: {
