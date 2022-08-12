@@ -1,9 +1,18 @@
 import cp, { ChildProcess } from 'child_process';
 import cluster from "cluster";
-import { PERSIST_FILE_PATH, PROCESS_EXIT_EVENTS } from './lib/consts';
-import { PersistData, WorkingMode } from './lib/types';
+import { DEFAULT_AGENT_CONFIG, PERSIST_FILE_FOLDER_PATH, PROCESS_EXIT_EVENTS } from './lib/consts';
+import { AgentConfig, PersistData, WorkingMode } from './lib/types';
 import path from 'path';
 import { unlink, writeFile } from 'fs/promises';
+import { defaultSet } from './lib/utils';
+import crypto from 'crypto';
+import { networkInterfaces } from 'os';
+import { mkdirSync } from 'fs';
+
+const getAgentIP = (): string => {
+    const ip = Object.values(networkInterfaces()).flat().find((i) => i?.family === 'IPv4' && !i?.internal)?.address;
+    return ip;
+}
 
 const getPM2ID = (): Promise<string> => {
     return new Promise((resolve) => {
@@ -39,7 +48,28 @@ const rebuildExecArgs = (filterAll: boolean = true) => {
     return args;
 }
 
-const processPersistData = () => {
+const randomServiceInstance = (seed: string): string => {
+    return crypto.createHash('md5').update( `${seed}${Date.now()}${10000000 * Math.random()}${10000000 * Math.random()}`).digest("hex");
+}
+
+const setDefaultConfig = (config: Partial<AgentConfig> | undefined, ip: string): AgentConfig => {
+    const conf: AgentConfig = config ? {...config} : {} as any;
+    if (!conf.service) {
+        throw new Error('agent configuration must contain "service" property');
+    }
+
+    conf.serverAddress = conf.serverAddress || DEFAULT_AGENT_CONFIG.serverAddress;
+
+    if (!conf.serviceInstance) {
+        conf.serviceInstance = `${randomServiceInstance(conf.service)}@${ip}`;
+    }
+
+    conf.collect = defaultSet(DEFAULT_AGENT_CONFIG.collect, conf.collect || {} as any);
+
+    return conf;
+}
+
+const processPersistData = (persistFilePath: string) => {
     const refresh = async (): Promise<void> => {
         let workerPIDs: number[] = [];
         for (let key in cluster.workers) {
@@ -47,9 +77,10 @@ const processPersistData = () => {
         }
         try {
             const data: PersistData = { workerPIDs, primaryPID: process.pid };
-            await writeFile(PERSIST_FILE_PATH, JSON.stringify(data, null, 2), 'utf-8');
-        } catch {
+            await writeFile(persistFilePath, JSON.stringify(data, null, 2), 'utf-8');
+        } catch (err) {
             //ignore error, try next time
+            console.error(err);
         }
 
         setTimeout(() => {
@@ -57,8 +88,11 @@ const processPersistData = () => {
         }, 30000);
     }
 
-    unlink(PERSIST_FILE_PATH).then(refresh).catch(err => {
-        console.warn('clear persist file failed ---> ', err);
+    unlink(persistFilePath).then(refresh).catch(err => {
+        if (err.code !== 'ENOENT') {
+            console.warn('clear persist file failed ---> ', err);
+        }
+        refresh();
     });
 }
 
@@ -73,7 +107,11 @@ const killAgentProcess = (proc: ChildProcess) => {
     } catch {}
 }
 
-const startup = (mode: WorkingMode) => {
+const startup = (mode: WorkingMode, passingConfig: Partial<Omit<AgentConfig, 'service'>> & Pick<AgentConfig, 'service'>) => {
+    
+    const config = setDefaultConfig(passingConfig, getAgentIP());
+    const persistFilePath = path.resolve(PERSIST_FILE_FOLDER_PATH, `${config.service}/${config.serviceInstance}.json`.replace(/@/img, '_'));
+    
     let isExited = false;
     const debug = process.env.APM_AGENT_DEBUG == 'true' || String(process.env.NODE_ENV).toLowerCase() !== 'production';
     console.log(`[APM-Agent] agent debug mode: ${debug}`);
@@ -82,6 +120,8 @@ const startup = (mode: WorkingMode) => {
         ...process.env,
         APM_AGENT_WORKING_MODE: mode,
         APM_AGENT_PARENT_PROCESS_PID: String(process.pid),
+        APM_AGENT_CONFIG_JSON: JSON.stringify(config),
+        APM_AGENT_PERSIST_FILE: persistFilePath,
     };
     const proc = cp.spawn('node', [ path.resolve(__dirname, 'agent.js') ], { 
         detached: false,
@@ -107,7 +147,8 @@ const startup = (mode: WorkingMode) => {
         //         proc.send({ event: 'pong', data: { pids } });
         //     }
         // });
-        processPersistData();
+        mkdirSync(path.resolve(PERSIST_FILE_FOLDER_PATH, config.service), { recursive: true });
+        processPersistData(persistFilePath);
     }
     PROCESS_EXIT_EVENTS.forEach((eventType) => {
         proc.once(eventType, (...rest) => {
@@ -122,6 +163,17 @@ const startup = (mode: WorkingMode) => {
 process.execArgv = rebuildExecArgs(false);
 
 setTimeout(async () => {
+
+    let config: Partial<Omit<AgentConfig, 'service'>> & Pick<AgentConfig, 'service'> = {
+        service: process.env.APM_ENDPOINT_SERVICE,
+        serviceInstance: process.env.APM_ENDPOINT_SERVICE_INSTANCE,
+        serverAddress: process.env.APM_SERVER_ADDRESS
+    };
+    
+    if (process.env.APM_AGENT_CONFIG) {
+        config = require(process.env.APM_AGENT_CONFIG);
+    }
+
     let mode: WorkingMode = WorkingMode.DEFAULT;
     let isPrimary: boolean = cluster.isPrimary;
     const isPM2 = !!process.env.PM2_HOME;
@@ -131,7 +183,7 @@ setTimeout(async () => {
         mode = WorkingMode.PM2;
     }
     if (isPrimary) {
-        startup(mode);
+        startup(mode, config);
     }
 }, 2000);
 

@@ -3,21 +3,21 @@ const express = require('express');
 const cluster = require("cluster");
 const totalCPUs = 2; //require("os").cpus().length;
 
-// if (cluster.isPrimary) {
-//     console.log(`Number of CPUs is ${totalCPUs}`);
-//     console.log(`Master ${process.pid} is running`);
+if (cluster.isPrimary) {
+    console.log(`Number of CPUs is ${totalCPUs}`);
+    console.log(`Master ${process.pid} is running`);
 
-//     // cluster.on("exit", (worker, code, signal) => {
-//     //     console.log(`worker ${worker.process.pid} died`);
-//     //     console.log("Let's fork another worker!");
-//     //     cluster.fork();
-//     // });
+    // cluster.on("exit", (worker, code, signal) => {
+    //     console.log(`worker ${worker.process.pid} died`);
+    //     console.log("Let's fork another worker!");
+    //     cluster.fork();
+    // });
 
-//     for (let i = 0; i < totalCPUs; i ++) {
-//         cluster.fork();
-//     }
+    for (let i = 0; i < totalCPUs; i ++) {
+        cluster.fork();
+    }
 
-// } else {
+} else {
     console.log(`Worker ${process.pid} started`);
 
     const app = express();
@@ -57,4 +57,4 @@ const totalCPUs = 2; //require("os").cpus().length;
     // setInterval(() => {
     //     console.log('working...');
     // }, 6000);
-// }
+}
