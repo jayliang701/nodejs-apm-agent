@@ -1,5 +1,4 @@
 const express = require('express');
-
 const cluster = require("cluster");
 const totalCPUs = 2; //require("os").cpus().length;
 

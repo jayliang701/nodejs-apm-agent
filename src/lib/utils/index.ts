@@ -1,3 +1,5 @@
+import crypto from 'crypto';
+
 export function defaultSet<S extends object, T extends object>(defaultObj: S, target: T): T {
     for (let key in defaultObj) {
         const defaultVal = defaultObj[key];
@@ -12,4 +14,8 @@ export function defaultSet<S extends object, T extends object>(defaultObj: S, ta
         }
     }
     return target;
+}
+
+export const md5 = (str: string | number): string => {
+    return crypto.createHash('md5').update(String(str)).digest("hex");
 }

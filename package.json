@@ -13,7 +13,8 @@
         "start": "npm run build && npm run serve",
         "start:dev": "npm run clean && nodemon",
         "prettier": "prettier --check '**/*.ts'",
-        "validate": "npm run prettier && npm run tslint && npm run build-ts"
+        "validate": "npm run prettier && npm run tslint && npm run build-ts",
+        "mock": "cross-env APM_AGENT_CONFIG='./agent.config.js' node -r './dist/index.js' server"
     },
     "keywords": [],
     "author": "",
@@ -39,7 +40,8 @@
         "@grpc/proto-loader": "^0.7.0",
         "axios": "^0.27.2",
         "dayjs": "^1.11.0",
-        "pidusage": "^3.0.0"
+        "pidusage": "^3.0.0",
+        "winston": "^3.8.1"
     },
     "nodemonConfig": {
         "ext": "ts,yaml",

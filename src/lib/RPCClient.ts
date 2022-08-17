@@ -4,7 +4,7 @@ import { loadPackageDefinition, credentials, ServiceClientConstructor } from '@g
 import * as protoLoader from '@grpc/proto-loader';
 import path from 'path';
 import { Http2ServerCallStream } from '@grpc/grpc-js/build/src/server-call';
-import { MetricProcessRPCMessage, MetricRPCMessage, RPCClientConfig } from './types';
+import { LogBody, SkywalkingLoggingCollectData, MetricProcessRPCMessage, MetricRPCMessage, RPCClientConfig } from './types';
 import TypedEventEmitter from './utils/TypedEventEmitter';
 import { ServiceClient } from '@grpc/grpc-js/build/src/make-client';
 
@@ -40,7 +40,9 @@ export default class RPCClient extends TypedEventEmitter {
         return RPCClient.instance;
     }
 
-    client: ServiceClient;
+    metricClient: ServiceClient;
+
+    loggingClient: ServiceClient;
 
     run(config: RPCClientConfig): Promise<void> {
         return new Promise(async (resolve) => {
@@ -49,10 +51,12 @@ export default class RPCClient extends TypedEventEmitter {
 
             // this.registerRPCServices();
             const metricProto = loadMetricProto('NodeJSMetric.proto');
-
             const MetricClient: ServiceClientConstructor = metricProto.pocketapm.NodeJSMetricReportService;
-
-            this.client = new MetricClient(serverAddress, credentials.createInsecure());
+            this.metricClient = new MetricClient(serverAddress, credentials.createInsecure());
+        
+            const loggingProto = loadMetricProto('Logging.proto');
+            const LoggingClient: ServiceClientConstructor = loggingProto.skywalking.v3.LogReportService;
+            this.loggingClient = new LoggingClient(serverAddress, credentials.createInsecure());
             resolve();
         });
     }
@@ -64,7 +68,7 @@ export default class RPCClient extends TypedEventEmitter {
                 service,
                 serviceInstance,
             };
-            this.client.collect(body, (err) => {
+            this.metricClient.collect(body, (err) => {
                 if (err) {
                     reject(err);
                     return;
@@ -74,10 +78,54 @@ export default class RPCClient extends TypedEventEmitter {
         })
     }
 
+    async reportLogs(service: string, serviceInstance: string, message: LogBody[]): Promise<void> {
+        return new Promise((resolve) => {
+
+            const call = this.loggingClient.collect((err) => {
+                // console.log(err);
+                resolve();
+            });
+            
+            for (let msg of message) {
+                const text: string = (msg as any)[Symbol.for('message')];
+                const body: SkywalkingLoggingCollectData = {
+                    timestamp: msg.timestamp,
+                    service,
+                    serviceInstance,
+                    endpoint: msg.endpoint,
+                    body: {
+                        type: 'TEXT',
+                        text: {
+                            text,
+                        },
+                        content: 'text'
+                    },
+                    traceContext: {},
+                    tags: {
+                        data: [
+                            { 
+                                key: 'level', 
+                                value: msg.LEVEL,
+                            },
+                            {
+                                key: 'pid',
+                                value: String(msg.pid),
+                            }
+                        ]
+                    },
+                    layer: '',
+
+                };
+                call.write(body);
+            }
+            call.end();
+        })
+    }
+
     shutdown(): Promise<void> {
         return new Promise((resolve) => {
             try {
-                if (this.client) this.client.close();
+                if (this.metricClient) this.metricClient.close();
             } catch {};
             resolve();
         });

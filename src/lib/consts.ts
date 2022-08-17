@@ -13,6 +13,7 @@ export const DEFAULT_AGENT_CONFIG: AgentConfig = {
     collect: {
         logging: {
             enabled: false,
+            globalVarName: 'logger',
         },
         metric: {
             enabled: false,
