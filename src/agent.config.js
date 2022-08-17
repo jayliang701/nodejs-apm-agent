@@ -8,7 +8,8 @@ module.exports = {
             duration: 5,
         },
         logging: {
-            enabled: false,
+            enabled: true,
+            globalVarName: 'logger',
         }
     }
 }

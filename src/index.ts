@@ -4,8 +4,8 @@ import { DEFAULT_AGENT_CONFIG, PERSIST_FILE_FOLDER_PATH, PROCESS_EXIT_EVENTS } f
 import { AgentConfig, PersistData, WorkingMode } from './lib/types';
 import path from 'path';
 import { unlink, writeFile } from 'fs/promises';
-import { defaultSet } from './lib/utils';
-import crypto from 'crypto';
+import { defaultSet, md5 } from './lib/utils';
+import * as logging from './logging';
 import { networkInterfaces } from 'os';
 import { mkdirSync } from 'fs';
 
@@ -27,32 +27,7 @@ const getPM2ID = (): Promise<string> => {
     });
 }
 
-const rebuildExecArgs = (filterAll: boolean = true) => {
-    const args = [];
-    for (let i = 0; i < process.execArgv.length; i ++) {
-        let val = process.execArgv[i];
-        if (val === '-r' || val === '--require') {
-            if (filterAll) {
-                i ++;
-                continue;
-            } else {
-                let nextVal = process.execArgv[i + 1];
-                if (nextVal && path.resolve(nextVal) === __filename) {
-                    i ++;
-                    continue;
-                }
-            }
-        }
-        args.push(val);
-    }
-    return args;
-}
-
-const randomServiceInstance = (seed: string): string => {
-    return crypto.createHash('md5').update( `${seed}${Date.now()}${10000000 * Math.random()}${10000000 * Math.random()}`).digest("hex");
-}
-
-const setDefaultConfig = (config: Partial<AgentConfig> | undefined, ip: string): AgentConfig => {
+const setDefaultConfig = (config: Partial<AgentConfig> | undefined): AgentConfig => {
     const conf: AgentConfig = config ? {...config} : {} as any;
     if (!conf.service) {
         throw new Error('agent configuration must contain "service" property');
@@ -61,7 +36,7 @@ const setDefaultConfig = (config: Partial<AgentConfig> | undefined, ip: string):
     conf.serverAddress = conf.serverAddress || DEFAULT_AGENT_CONFIG.serverAddress;
 
     if (!conf.serviceInstance) {
-        conf.serviceInstance = `${randomServiceInstance(conf.service)}@${ip}`;
+        conf.serviceInstance = genDefaultServiceInstance();
     }
 
     conf.collect = defaultSet(DEFAULT_AGENT_CONFIG.collect, conf.collect || {} as any);
@@ -107,9 +82,7 @@ const killAgentProcess = (proc: ChildProcess) => {
     } catch {}
 }
 
-const startup = (mode: WorkingMode, passingConfig: Partial<Omit<AgentConfig, 'service'>> & Pick<AgentConfig, 'service'>) => {
-    
-    const config = setDefaultConfig(passingConfig, getAgentIP());
+const startup = (mode: WorkingMode, config: AgentConfig) => {
     const persistFilePath = path.resolve(PERSIST_FILE_FOLDER_PATH, `${config.service}/${config.serviceInstance}.json`.replace(/@/img, '_'));
     
     let isExited = false;
@@ -120,7 +93,6 @@ const startup = (mode: WorkingMode, passingConfig: Partial<Omit<AgentConfig, 'se
         ...process.env,
         APM_AGENT_WORKING_MODE: mode,
         APM_AGENT_PARENT_PROCESS_PID: String(process.pid),
-        APM_AGENT_CONFIG_JSON: JSON.stringify(config),
         APM_AGENT_PERSIST_FILE: persistFilePath,
     };
     const proc = cp.spawn('node', [ path.resolve(__dirname, 'agent.js') ], { 
@@ -138,15 +110,6 @@ const startup = (mode: WorkingMode, passingConfig: Partial<Omit<AgentConfig, 'se
         });
     }
     if (mode === WorkingMode.DEFAULT) {
-        // proc.on('message', (message: ProcessMessage) => {
-        //     if (message.event === 'ping') {
-        //         let pids: number[] = [ process.pid ];
-        //         for (let key in cluster.workers) {
-        //             pids.push(cluster.workers[key].process.pid);
-        //         }
-        //         proc.send({ event: 'pong', data: { pids } });
-        //     }
-        // });
         mkdirSync(path.resolve(PERSIST_FILE_FOLDER_PATH, config.service), { recursive: true });
         processPersistData(persistFilePath);
     }
@@ -160,30 +123,71 @@ const startup = (mode: WorkingMode, passingConfig: Partial<Omit<AgentConfig, 'se
     });
 }
 
-process.execArgv = rebuildExecArgs(false);
+const genDefaultServiceInstance = (): string => {
+    const isPM2 = !!process.env.PM2_HOME;
+
+    let serviceInstance: string;
+    if (isPM2) {
+        serviceInstance = md5(process.env.name || process.env.pm_exec_path);
+    } else {
+        if (process.ppid) {
+            serviceInstance = md5(cluster.isPrimary ? process.pid : process.ppid);
+        } else {
+            serviceInstance = md5(process.argv.join());
+        }
+    }
+    return serviceInstance + '@' + getAgentIP();
+}
 
 setTimeout(async () => {
-
+    
     let config: Partial<Omit<AgentConfig, 'service'>> & Pick<AgentConfig, 'service'> = {
         service: process.env.APM_ENDPOINT_SERVICE,
         serviceInstance: process.env.APM_ENDPOINT_SERVICE_INSTANCE,
         serverAddress: process.env.APM_SERVER_ADDRESS
     };
-    
+
     if (process.env.APM_AGENT_CONFIG) {
         config = require(process.env.APM_AGENT_CONFIG);
     }
 
+    const finalConfig = setDefaultConfig(config);
+    process.env.APM_AGENT_CONFIG_JSON = JSON.stringify(finalConfig);
+
+    if (finalConfig.collect.logging.enabled) {
+        try {
+            let customLogger = global[finalConfig.collect.logging.globalVarName];
+            customLogger = await logging.initialize(finalConfig, customLogger);
+            global[finalConfig.collect.logging.globalVarName] = customLogger;
+        } catch (err) {
+            console.error(err);
+        }
+    }
+
+    const isPM2 = !!process.env.PM2_HOME;
     let mode: WorkingMode = WorkingMode.DEFAULT;
     let isPrimary: boolean = cluster.isPrimary;
-    const isPM2 = !!process.env.PM2_HOME;
+
     if (isPM2) {
         const pmid = await getPM2ID();
         isPrimary = pmid == '0';
         mode = WorkingMode.PM2;
     }
     if (isPrimary) {
-        startup(mode, config);
+        startup(mode, finalConfig);
     }
-}, 2000);
+    
+    // debug
+    // setTimeout(() => {
+    //     setInterval(() => {
+    //         global.logger.info('this is info log');
+    //     }, 5000 + Math.random() * 10 * 1000);
+    // }, 2000);
+    
+    // setTimeout(() => {
+    //     setInterval(() => {
+    //         global.logger.error('ops!!!! something error!!!');
+    //     }, 5000 + Math.random() * 10 * 1000);
+    // }, 5000 + Math.random() * 2 * 1000);
+}, 200);
 

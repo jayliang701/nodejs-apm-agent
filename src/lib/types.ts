@@ -1,4 +1,6 @@
 
+import { TransformableInfo } from 'logform';
+
 export type RPCClientConfig = {
     serverAddress: string;
 };
@@ -27,6 +29,25 @@ export type MetricRPCMessage = {
     processes: MetricProcessRPCMessage[];
 } & RPCMessage;
 
+export type SkywalkingLoggingCollectData = {
+    timestamp: number;
+    endpoint: string;
+    body: {
+        type: 'TEXT' | 'JSON' | 'YAML';
+        text?: {
+            text: string;
+        },
+        json?: any;
+        yaml?: any;
+        content: 'text' | 'json' | 'yaml';
+    },
+    tags: {
+        data: { key: string, value: string }[];
+    },
+    traceContext?: any;
+    layer?: string;
+} & RPCMessage;
+
 export type MetricProcessRPCMessage = {
     pid: number;
     metrics: Omit<Metric, 'pid'>[];
@@ -52,27 +73,16 @@ export type AgentConfig = {
         },
         logging: {
             enabled: boolean;
+            globalVarName: string;   //logger对象的全局变量名称, 默认logger
         }
     }
 };
 
-export type SkywalkingLoggingCollectData = {
-    service: string;
-    serviceInstance: string;
-    timestamp: string;
-    endpoint: string;
-    body: {
-        type: 'TEXT' | 'JSON' | 'YAML';
-        text?: {
-            text: string;
-        },
-        json?: any;
-        yaml?: any;
-        content: 'text' | 'json' | 'yaml';
-    },
-    tags: {
-        data: { key: string, value: string }[];
-    }
-};
-
 export type LogLevel = 'ERROR' | 'INFO' | 'WARN' | 'DEBUG';
+
+export type LogBody = {
+    timestamp: number;
+    service: string;
+    pid: number;
+    LEVEL: LogLevel;
+} & TransformableInfo;
