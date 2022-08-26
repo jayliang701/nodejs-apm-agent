@@ -95,7 +95,7 @@ const startup = (mode: WorkingMode, config: AgentConfig) => {
         APM_AGENT_PARENT_PROCESS_PID: String(process.pid),
         APM_AGENT_PERSIST_FILE: persistFilePath,
     };
-    const proc = cp.spawn('node', [ path.resolve(__dirname, 'agent.js') ], { 
+    const proc = cp.spawn('node', [ path.resolve(__dirname, 'agent-worker.js') ], { 
         detached: false,
         stdio: debug ? undefined : 'ignore',
         cwd: process.cwd(),
