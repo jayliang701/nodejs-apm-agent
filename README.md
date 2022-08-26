@@ -7,7 +7,7 @@ nodejs-apm-agent 拥有以下特性:
 - 运行于独立的 child_process 进程, 不会阻塞应用进程.
 
 ## 快速起步
-1. 从此处下载已编译文件. 下载并解压缩后得到以下文件:
+1. 从[此处](https://github.com/jayliang701/nodejs-apm-agent/releases)下载已编译文件. 下载并解压缩后得到以下文件:
 ```
 |-- proto                  # protobuf 协议文件
 |-- nodejs-apm-agent.js    # agent 主程序文件
