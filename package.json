@@ -39,13 +39,5 @@
         "dayjs": "^1.11.0",
         "pidusage": "^3.0.0",
         "winston": "^3.8.1"
-    },
-    "nodemonConfig": {
-        "ext": "ts,yaml",
-        "ignore": [
-            "dist",
-            "node_modules"
-        ],
-        "exec": "npm run start"
     }
 }
